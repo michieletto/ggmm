@@ -18,6 +18,8 @@ import sys
 
 from scipy import linalg
 
+from sklearn.cluster import KMeans
+
 EPS = np.finfo(float).eps
 
 logger = logging.getLogger(__name__)
@@ -282,18 +284,24 @@ class GMM(object):
 
     def __init__(self, n_components, n_dimensions,
                  covariance_type='diag',
+                 init_type='kmeans',
                  min_covar=1e-3,
                  verbose=False):
 
         self.n_components = n_components
         self.n_dimensions = n_dimensions
         self.covariance_type = covariance_type
+        self.init_type = init_type
         self.min_covar = min_covar
         self.verbose = verbose
 
         if covariance_type not in ['diag']:
             raise ValueError('Invalid value for covariance_type: %s' %
                              covariance_type)
+
+        if init_type not in ['kmeans', 'random']:
+            raise ValueError('Invalid value for init_type: %s' %
+                             init_type)
 
         self.weights = None
         self.means = None
@@ -579,8 +587,12 @@ class GMM(object):
 
         for _ in range(n_init):
             if 'm' in init_params or self.means is None:
-                perm = random_state.permutation(n_samples)
-                self.means = return_CUDAMatrix(X[perm[:self.n_components]])
+                if self.init_type == 'diag':
+                    perm = random_state.permutation(n_samples)
+                    self.means = return_CUDAMatrix(X[perm[:self.n_components]])
+                elif self.init_type == 'kmeans':
+                    kmeans = KMeans(n_clusters=self.n_components, random_state=random_state).fit(X)
+                    self.means = return_CUDAMatrix(kmeans.cluster_centers_)
 
             if 'w' in init_params or self.weights is None:
                 self.weights = return_CUDAMatrix(
